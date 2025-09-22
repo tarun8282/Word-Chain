@@ -111,20 +111,30 @@ int isWordUsed(char *word)
     return 0; // not used
 }
 
+void clearHashMap() {
+    for (int i = 0; i < TABLE_SIZE; i++) {
+        struct HashNode *temp = hashTable[i];
+        while (temp) {
+            struct HashNode *toDelete = temp;
+            temp = temp->next;
+            free(toDelete);
+        }
+        hashTable[i] = NULL; // set head to NULL
+    }
+}
+
+
 // Main game logic
 void playGame(struct Node *dictionary, int totalWords) {
     char prevWord[50], userWord[50];
     strcpy(prevWord, getRandomWord(dictionary, totalWords));
     printf("\nStarting word: %s\n", prevWord);
     insertUsedWord(prevWord); // mark starting word as used
-    int counter=0;
+    unsigned int counter=0;
     while (1) {
         printf("Score-->%d\n",counter);
-        printf("Enter next word (or type 'quit' to end): ");
+        printf("Enter next word :");
         scanf("%s", userWord);
-
-        if (strcmp(userWord, "quit") == 0)
-            break;
 
         if (isWordUsed(userWord))
         {
@@ -145,6 +155,7 @@ void playGame(struct Node *dictionary, int totalWords) {
             break;
         }
 
+        counter += strlen(userWord);
         insertUsedWord(userWord);
         printf("✅ Good! Next round...\n");
         strcpy(prevWord, userWord);
@@ -165,12 +176,13 @@ int main() {
     do {
         printf("\n====== WORD CHAIN GAME ======\n");    // Current Score:
         printf("1. Play\n");
-        printf("2. Exit\n");
+        printf("2. Exit\n");    
         printf("Enter choice: ");
         scanf("%d", &choice);
 
         switch (choice) {
             case 1:
+                clearHashMap();
                 playGame(dictionary, totalWords);
                 break;
             case 2:
