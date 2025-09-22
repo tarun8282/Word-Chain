@@ -73,8 +73,9 @@ void playGame(struct Node *dictionary, int totalWords) {
     char prevWord[50], userWord[50];
     strcpy(prevWord, getRandomWord(dictionary, totalWords));
     printf("\nStarting word: %s\n", prevWord);
-
+    int counter=0;
     while (1) {
+        printf("Score-->%d\n",counter);
         printf("Enter next word (or type 'quit' to end): ");
         scanf("%s", userWord);
 
