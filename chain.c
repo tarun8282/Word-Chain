@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include<ctype.h>
 
 struct Node {
     char word[50];
@@ -88,7 +89,7 @@ void playGame(struct Node *dictionary, int totalWords) {
 
         // Check if it starts with last letter of prev word
         char lastChar = prevWord[strlen(prevWord) - 1];
-        if (userWord[0] != lastChar) {
+        if (tolower(userWord[0]) != tolower(lastChar)) {
             printf("❌ Word must start with '%c'. Game Over!\n", lastChar);
             break;
         }
