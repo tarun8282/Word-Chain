@@ -3,6 +3,7 @@
 #include <string.h>
 #include <time.h>
 #include<ctype.h>
+#define TABLE_SIZE 10007
 
 struct Node {
     char word[50];
@@ -68,11 +69,54 @@ int wordExists(struct Node *head, char *word) {
     return 0;
 }
 
+// ---------------- Hash Map for Used Words ----------------
+struct HashNode
+{
+    char word[50];
+    struct HashNode *next;
+};
+
+struct HashNode *hashTable[TABLE_SIZE] = {NULL};
+
+// Simple hash function
+unsigned int hash(char *word)
+{
+    unsigned long h = 0;
+    for (int i = 0; word[i]; i++)
+        h = h * 31 + tolower((unsigned char)word[i]); // cast to unsigned char
+    return h % TABLE_SIZE;
+}
+
+// Insert word into hash map
+void insertUsedWord(char *word)
+{
+    unsigned int idx = hash(word);
+    struct HashNode *newNode = (struct HashNode *)malloc(sizeof(struct HashNode));
+    strcpy(newNode->word, word);
+    newNode->next = hashTable[idx];
+    hashTable[idx] = newNode;
+}
+
+// Search word in hash map
+int isWordUsed(char *word)
+{
+    unsigned int idx = hash(word);
+    struct HashNode *temp = hashTable[idx];
+    while (temp)
+    {
+        if (strcasecmp(temp->word, word) == 0)
+            return 1; // word already used
+        temp = temp->next;
+    }
+    return 0; // not used
+}
+
 // Main game logic
 void playGame(struct Node *dictionary, int totalWords) {
     char prevWord[50], userWord[50];
     strcpy(prevWord, getRandomWord(dictionary, totalWords));
     printf("\nStarting word: %s\n", prevWord);
+    insertUsedWord(prevWord); // mark starting word as used
     int counter=0;
     while (1) {
         printf("Score-->%d\n",counter);
@@ -81,6 +125,12 @@ void playGame(struct Node *dictionary, int totalWords) {
 
         if (strcmp(userWord, "quit") == 0)
             break;
+
+        if (isWordUsed(userWord))
+        {
+            printf("❌ Word already used. Game Over!\n");
+            break;
+        }
 
         // Check if word exists in dictionary
         if (!wordExists(dictionary, userWord)) {
@@ -95,6 +145,7 @@ void playGame(struct Node *dictionary, int totalWords) {
             break;
         }
 
+        insertUsedWord(userWord);
         printf("✅ Good! Next round...\n");
         strcpy(prevWord, userWord);
     }
