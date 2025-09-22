@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
-#include<ctype.h>
+#include <ctype.h>
 #define TABLE_SIZE 10007
 
 struct Node {
@@ -18,35 +18,36 @@ struct Node* createNode(char *w) {
     return newNode;
 }
 
-// Insert at end
-void insertWord(struct Node **head, char *w) {
+// Insert at end, returns new head
+struct Node* insertWord(struct Node *head, char *w) {
     struct Node *newNode = createNode(w);
-    if (*head == NULL) {
-        *head = newNode;
-        return;
-    }
-    struct Node *temp = *head;
+    if (!head) return newNode; // empty list
+    struct Node *temp = head;
     while (temp->next != NULL)
         temp = temp->next;
     temp->next = newNode;
+    return head;
 }
 
 // Load dictionary into linked list
-int loadDictionary(const char *dictionary, struct Node **head) {
+struct Node* loadDictionary(const char *dictionary, int *totalWords) {
     FILE *file = fopen(dictionary, "r");
     if (!file) {
         printf("Error: Cannot open dictionary file.\n");
-        return 0;
+        *totalWords = 0;
+        return NULL;
     }
     char buffer[50];
+    struct Node *head = NULL;
     int count = 0;
     while (fgets(buffer, sizeof(buffer), file)) {
-        buffer[strcspn(buffer, "\n")] = '\0'; // remove newline
-        insertWord(head, buffer);
+        buffer[strcspn(buffer, "\n")] = '\0';
+        head = insertWord(head, buffer);
         count++;
     }
     fclose(file);
-    return count;
+    *totalWords = count;
+    return head;
 }
 
 // Pick random word from dictionary
@@ -60,7 +61,43 @@ char* getRandomWord(struct Node *head, int totalWords) {
 
 // Check if word exists in dictionary
 int wordExists(struct Node *head, char *word) {
-    struct Node *temp = head;
+    while (head) {
+        if (strcasecmp(head->word, word) == 0)
+            return 1;
+        head = head->next;
+    }
+    return 0;
+}
+
+// ---------------- Hash Map for Used Words ----------------
+struct HashNode {
+    char word[50];
+    struct HashNode *next;
+};
+
+struct HashNode *hashTable[TABLE_SIZE] = {NULL};
+
+// Simple hash function
+unsigned int hash(char *word) {
+    unsigned long h = 0;
+    for (int i = 0; word[i]; i++)
+        h = h * 31 + tolower((unsigned char)word[i]);
+    return h % TABLE_SIZE;
+}
+
+// Insert word into hash map
+void insertUsedWord(char *word) {
+    unsigned int idx = hash(word);
+    struct HashNode *newNode = (struct HashNode*)malloc(sizeof(struct HashNode));
+    strcpy(newNode->word, word);
+    newNode->next = hashTable[idx];
+    hashTable[idx] = newNode;
+}
+
+// Search word in hash map
+int isWordUsed(char *word) {
+    unsigned int idx = hash(word);
+    struct HashNode *temp = hashTable[idx];
     while (temp) {
         if (strcasecmp(temp->word, word) == 0)
             return 1;
@@ -69,48 +106,7 @@ int wordExists(struct Node *head, char *word) {
     return 0;
 }
 
-// ---------------- Hash Map for Used Words ----------------
-struct HashNode
-{
-    char word[50];
-    struct HashNode *next;
-};
-
-struct HashNode *hashTable[TABLE_SIZE] = {NULL};
-
-// Simple hash function
-unsigned int hash(char *word)
-{
-    unsigned long h = 0;
-    for (int i = 0; word[i]; i++)
-        h = h * 31 + tolower((unsigned char)word[i]); // cast to unsigned char
-    return h % TABLE_SIZE;
-}
-
-// Insert word into hash map
-void insertUsedWord(char *word)
-{
-    unsigned int idx = hash(word);
-    struct HashNode *newNode = (struct HashNode *)malloc(sizeof(struct HashNode));
-    strcpy(newNode->word, word);
-    newNode->next = hashTable[idx];
-    hashTable[idx] = newNode;
-}
-
-// Search word in hash map
-int isWordUsed(char *word)
-{
-    unsigned int idx = hash(word);
-    struct HashNode *temp = hashTable[idx];
-    while (temp)
-    {
-        if (strcasecmp(temp->word, word) == 0)
-            return 1; // word already used
-        temp = temp->next;
-    }
-    return 0; // not used
-}
-
+// Clear hash map
 void clearHashMap() {
     for (int i = 0; i < TABLE_SIZE; i++) {
         struct HashNode *temp = hashTable[i];
@@ -119,43 +115,40 @@ void clearHashMap() {
             temp = temp->next;
             free(toDelete);
         }
-        hashTable[i] = NULL; // set head to NULL
+        hashTable[i] = NULL;
     }
 }
-
 
 // Main game logic
 void playGame(struct Node *dictionary, int totalWords) {
     char prevWord[50], userWord[50];
     strcpy(prevWord, getRandomWord(dictionary, totalWords));
     printf("\nStarting word: %s\n", prevWord);
-    insertUsedWord(prevWord); // mark starting word as used
-    unsigned int counter=0;
+    insertUsedWord(prevWord);
+    unsigned int score = 0;
+
     while (1) {
-        printf("Score-->%d\n",counter);
-        printf("Enter next word :");
+        printf("Score-->%d\n", score);
+        printf("Enter next word: ");
         scanf("%s", userWord);
 
-        if (isWordUsed(userWord))
-        {
+        if (isWordUsed(userWord)) {
             printf("❌ Word already used. Game Over!\n");
             break;
         }
 
-        // Check if word exists in dictionary
         if (!wordExists(dictionary, userWord)) {
             printf("❌ Word not found in dictionary. Game Over!\n");
             break;
         }
 
-        // Check if it starts with last letter of prev word
         char lastChar = prevWord[strlen(prevWord) - 1];
         if (tolower(userWord[0]) != tolower(lastChar)) {
             printf("❌ Word must start with '%c'. Game Over!\n", lastChar);
             break;
         }
 
-        counter += strlen(userWord);
+        score += strlen(userWord);
         insertUsedWord(userWord);
         printf("✅ Good! Next round...\n");
         strcpy(prevWord, userWord);
@@ -165,18 +158,18 @@ void playGame(struct Node *dictionary, int totalWords) {
 // Menu-driven approach
 int main() {
     struct Node *dictionary = NULL;
-    int totalWords;
+    int totalWords = 0;
 
-    srand(time(NULL)); // seed random
+    srand(time(NULL));
 
-    totalWords = loadDictionary("dictionary.txt", &dictionary);
-    if (totalWords == 0) return 0; // dictionary not loaded
+    dictionary = loadDictionary("dictionary.txt", &totalWords);
+    if (!dictionary) return 0;
 
     int choice;
     do {
-        printf("\n====== WORD CHAIN GAME ======\n");    // Current Score:
+        printf("\n====== WORD CHAIN GAME ======\n");
         printf("1. Play\n");
-        printf("2. Exit\n");    
+        printf("2. Exit\n");
         printf("Enter choice: ");
         scanf("%d", &choice);
 
