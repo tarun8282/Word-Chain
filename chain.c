@@ -1,67 +1,59 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <windows.h> // for Sleep()
-#include <conio.h>   // already included for kbhit()
 #include <time.h>
-#include <ctype.h>
+#include<ctype.h>
 #define TABLE_SIZE 10007
+#include<conio.h>
+#include <windows.h>
 
-struct Node
-{
+
+struct Node {
     char word[50];
     struct Node *next;
 };
 
 // Create a new node
-struct Node *createNode(char *w)
-{
-    struct Node *newNode = (struct Node *)malloc(sizeof(struct Node));
+struct Node* createNode(char *w) {
+    struct Node *newNode = (struct Node*)malloc(sizeof(struct Node));
     strcpy(newNode->word, w);
     newNode->next = NULL;
     return newNode;
 }
 
-// Insert at end, returns new head
-struct Node *insertWord(struct Node *head, char *w)
-{
+// Insert at end
+void insertWord(struct Node **head, char *w) {
     struct Node *newNode = createNode(w);
-    if (!head)
-        return newNode; // empty list
-    struct Node *temp = head;
+    if (*head == NULL) {
+        *head = newNode;
+        return;
+    }
+    struct Node *temp = *head;
     while (temp->next != NULL)
         temp = temp->next;
     temp->next = newNode;
-    return head;
 }
 
 // Load dictionary into linked list
-struct Node *loadDictionary(const char *dictionary, int *totalWords)
-{
+int loadDictionary(const char *dictionary, struct Node **head) {
     FILE *file = fopen(dictionary, "r");
-    if (!file)
-    {
+    if (!file) {
         printf("Error: Cannot open dictionary file.\n");
-        *totalWords = 0;
-        return NULL;
+        return 0;
     }
     char buffer[50];
-    struct Node *head = NULL;
     int count = 0;
-    while (fgets(buffer, sizeof(buffer), file))
-    {
-        buffer[strcspn(buffer, "\n")] = '\0';
-        head = insertWord(head, buffer);
+    while (fgets(buffer, sizeof(buffer), file)) {
+        buffer[strcspn(buffer, "\n")] = '\0'; // remove newline
+        insertWord(head, buffer);
         count++;
     }
     fclose(file);
-    *totalWords = count;
-    return head;
+    return count;
 }
 
 // Pick random word from dictionary
-char *getRandomWord(struct Node *head, int totalWords)
-{
+char* getRandomWord(struct Node *head, int totalWords) {
     int randomIndex = rand() % totalWords;
     struct Node *temp = head;
     for (int i = 0; i < randomIndex; i++)
@@ -70,13 +62,12 @@ char *getRandomWord(struct Node *head, int totalWords)
 }
 
 // Check if word exists in dictionary
-int wordExists(struct Node *head, char *word)
-{
-    while (head)
-    {
-        if (strcasecmp(head->word, word) == 0)
+int wordExists(struct Node *head, char *word) {
+    struct Node *temp = head;
+    while (temp) {
+        if (strcasecmp(temp->word, word) == 0)
             return 1;
-        head = head->next;
+        temp = temp->next;
     }
     return 0;
 }
@@ -95,7 +86,7 @@ unsigned int hash(char *word)
 {
     unsigned long h = 0;
     for (int i = 0; word[i]; i++)
-        h = h * 31 + tolower((unsigned char)word[i]);
+        h = h * 31 + tolower((unsigned char)word[i]); // cast to unsigned char
     return h % TABLE_SIZE;
 }
 
@@ -117,153 +108,237 @@ int isWordUsed(char *word)
     while (temp)
     {
         if (strcasecmp(temp->word, word) == 0)
-            return 1;
+            return 1; // word already used
         temp = temp->next;
     }
-    return 0;
+    return 0; // not used
 }
 
-// Clear hash map
-void clearHashMap()
-{
-    for (int i = 0; i < TABLE_SIZE; i++)
-    {
+void clearHashMap() {
+    for (int i = 0; i < TABLE_SIZE; i++) {
         struct HashNode *temp = hashTable[i];
-        while (temp)
-        {
+        while (temp) {
             struct HashNode *toDelete = temp;
             temp = temp->next;
             free(toDelete);
         }
-        hashTable[i] = NULL;
+        hashTable[i] = NULL; // set head to NULL
     }
+}
+void clearScreen() {
+    printf("\033[2J\033[H"); // Clear screen and move cursor to home
 }
 
 // Main game logic
-void playGame(struct Node *dictionary, int totalWords)
-{
-    char prevWord[50], userWord[50];
-    strcpy(prevWord, getRandomWord(dictionary, totalWords));
-    printf("\nStarting word: %s\n", prevWord);
-    insertUsedWord(prevWord);
-    unsigned int score = 0;
+void pauseScreen() {
+    printf("\n    Press Enter to return to the main menu...");
+    // Clear the input buffer before waiting for the final Enter
+    while (getchar() != '\n'); 
+    getchar();
+}
 
-    while (1)
-    {
-        printf("Score-->%d\n", score);
-        // ---------------- NEW: Live 10-second timer ----------------
+void displayGameOver(const char *reason, const char *word, int score) {
+    printf("\n\n");
+    printf("        ╔═══════════════════════════════════════╗\n");
+    printf("        ║                 GAME OVER              ║\n");
+    printf("        ╠═══════════════════════════════════════╣\n");
+    printf("        ║                                       ║\n");
+    printf("        ║   Reason: %-28s ║\n", reason);
+    if (word != NULL && word[0] != '\0') {
+        printf("        ║   Word:   %-28s ║\n", word);
+    }
+    printf("        ║                                       ║\n");
+    printf("        ║            FINAL SCORE: %-5d           ║\n", score);
+    printf("        ║                                       ║\n");
+    printf("        ╚═══════════════════════════════════════╝\n");
+    pauseScreen(); // Reuse your existing pause function
+}
+
+// The score is now passed by reference (using a pointer)
+void playGame(struct Node *dictionary, int totalWords, int *score) {
+    char prevWord[50], userWord[50];
+    int turn = 1;
+
+    // Start the game with a random word
+    strcpy(prevWord, getRandomWord(dictionary, totalWords));
+    insertUsedWord(prevWord); // Mark starting word as used
+
+    while (1) {
+        clearScreen();
+        char nextLetter = toupper(prevWord[strlen(prevWord) - 1]);
+
+        // --- THE GAME UI ---
+        printf("    ╔═════════════════════════════════════════╗\n");
+        printf("    ║                 G A M E   O N           ║\n");
+        printf("    ╠═════════════════════════════════════════╣\n");
+        printf("    ║  Turn: %-5d        Current Score: %-5d ║\n", turn, *score);
+        printf("    ╠═════════════════════════════════════════╣\n");
+        printf("    ║                                         ║\n");
+        printf("    ║   Current Word:   %-20s  ║\n", prevWord);
+        printf("    ║   Next word must start with:   '%c'        ║\n", nextLetter);
+        printf("    ║                                         ║\n");
+        printf("    ╚═════════════════════════════════════════╝\n");
+
+        // --- TIMER AND LIVE INPUT SECTION ---
         int timeLimit = 10;
         clock_t start = clock();
         int remaining;
         int index = 0;
-
         memset(userWord, 0, sizeof(userWord));
 
-        while (1)
-        {
+        while (1) {
             remaining = timeLimit - (int)((clock() - start) / CLOCKS_PER_SEC);
-            if (remaining < 0)
-            {
-                printf("\n⏰ Time's up! Game Over!\n");
-                return; // exit playGame
+            if (remaining < 0) {
+                clearScreen();
+                displayGameOver("Time's up!", "", *score);
+                return; // Exit playGame immediately
             }
 
-            // Clear line : move cursor to start and overwrite
-            printf("\r%50s", ""); // clear previous content
-            printf("\rTime left: %2d sec | Enter next word: %s", remaining, userWord);
-
+            // Live-updating input line
+            printf("\r    Time: %2d sec | Your Word > %-25s", remaining, userWord);
             fflush(stdout);
-            if (kbhit())
-            {
-                char c = getch(); // get character without waiting for enter
 
-                if (c == 13) // Enter pressed
-                {
-                    userWord[index] = '\0'; // finalize input
+            if (kbhit()) {
+                char c = getch();
+
+                if (c == 13) { // Enter key
+                    userWord[index] = '\0';
                     break;
-                }
-                else if (c == 8) // Backspace
-                {
-                    if (index > 0)
-                    {
+                } else if (c == 8) { // Backspace key
+                    if (index > 0) {
                         index--;
                         userWord[index] = '\0';
-                        printf("\rTime left: %2d sec | Enter next word: %s ", remaining, userWord);
+                        // Add a space at the end to clear any leftover characters from longer words
+                        printf("\r    Time: %2d sec | Your Word > %-25s ", remaining, userWord); 
                         fflush(stdout);
                     }
-                }
-                else if (index < 49) // max word length
-                {
+                } else if (index < 49 && isalpha(c)) { // Only allow letters
                     userWord[index++] = c;
                     userWord[index] = '\0';
                 }
             }
-
-            Sleep(100); // 0.1 sec delay to reduce CPU usage
+            Sleep(50); // Small delay to reduce CPU usage
         }
-        printf("\n"); // new line after input / time display
-        // ---------------- END OF TIMER ----------------
+        printf("\n\n"); // Move to a new line after input is finalized
 
-        if (isWordUsed(userWord))
-        {
-            printf("❌ Word already used. Game Over!\n");
+        // --- VALIDATION SECTION ---
+        
+        // 1. Check if the user entered anything
+        if (strlen(userWord) == 0) {
+            displayGameOver("No word entered!", "", *score);
+            break;
+        }
+        
+        // 2. Check if word has already been used
+        if (isWordUsed(userWord)) {
+            displayGameOver("Word already used!", userWord, *score);
             break;
         }
 
-        if (!wordExists(dictionary, userWord))
-        {
-            printf("❌ Word not found in dictionary. Game Over!\n");
+        // 3. Check if word exists in the dictionary
+        if (!wordExists(dictionary, userWord)) {
+            displayGameOver("Not in dictionary!", userWord, *score);
+            break;
+        }
+        
+        // 4. Check if it starts with the correct letter
+        if (tolower(userWord[0]) != tolower(nextLetter)) {
+            char reason[30];
+            sprintf(reason, "Must start with '%c'!", nextLetter);
+            displayGameOver(reason, userWord, *score);
             break;
         }
 
-        char lastChar = prevWord[strlen(prevWord) - 1];
-        if (tolower(userWord[0]) != tolower(lastChar))
-        {
-            printf("❌ Word must start with '%c'. Game Over!\n", lastChar);
-            break;
-        }
-
-        score += strlen(userWord);
+        // --- SUCCESS! Prepare for the next round ---
+        *score += strlen(userWord); // Score based on word length
+        turn++;
         insertUsedWord(userWord);
-        printf("✅ Good! Next round...\n");
         strcpy(prevWord, userWord);
     }
 }
+//Rules
+void displayRules() {
+    // system("clear") or system("cls")
+    printf("\n\n");
+    printf("    ================ HOW TO PLAY ================\n");
+    printf("    1. The computer will start with a random word.\n");
+    printf("    2. You must enter a word that starts with the\n");
+    printf("       last letter of the computer's word.\n");
+    printf("    3. Words cannot be repeated in a single game!\n");
+    printf("    4. The game ends when a player cannot think of a\n");
+    printf("       valid word.\n");
+    printf("    5. You will have a total of 10 seconds to enter a word.\n");
+    printf("    =============================================\n\n");
+    printf("    Press Enter to return to the menu...");
+    while (getchar() != '\n'); // Clear any leftover newline characters
+    getchar(); // Wait for user i
+   
+}
+
 
 // Menu-driven approach
-int main()
-{
+int main() {
     struct Node *dictionary = NULL;
-    int totalWords = 0;
+    int totalWords;
+    int currentScore = 0; // Track score across games
 
-    srand(time(NULL));
+    srand(time(NULL)); // Seed random
 
-    dictionary = loadDictionary("dictionary.txt", &totalWords);
-    if (!dictionary)
-        return 0;
+    totalWords = loadDictionary("dictionary.txt", &dictionary);
+    if (totalWords == 0) {
+        printf("FATAL ERROR: dictionary.txt could not be loaded.\n");
+        return 1;
+    }
 
     int choice;
-    do
-    {
-        printf("\n====== WORD CHAIN GAME ======\n");
-        printf("1. Play\n");
-        printf("2. Exit\n");
-        printf("Enter choice: ");
-        scanf("%d", &choice);
+    do {
+        // Clear screen for a cleaner look (optional, system-dependent)
+        // system("cls"); // For Windows
+        // system("clear"); // For Linux/macOS
 
-        switch (choice)
-        {
-        case 1:
-            clearHashMap();
-            playGame(dictionary, totalWords);
-            break;
-        case 2:
-            printf("Exiting game...\n");
-            break;
-        default:
-            printf("Invalid choice! Try again.\n");
+        printf("\n");
+        printf("    ╔═════════════════════════════════════════╗\n");
+        printf("    ║   W O R D   C H A I N   C H A L L E N G E ║\n");
+        printf("    ╚═════════════════════════════════════════╝\n");
+        printf("         🔗Linking one word at a time🔗\n\n");
+        printf("          ---------------------------------\n");
+        printf("               CURRENT SCORE: %d\n", currentScore);
+        printf("          ---------------------------------\n\n");
+
+        printf("               [ 1 ]  Start New Game\n");
+        printf("               [ 2 ]  How to Play\n");
+        printf("               [ 3 ]  Exit Game\n\n");
+        printf("    Select an option > ");
+
+        if (scanf("%d", &choice) != 1) {
+            while (getchar() != '\n'); // Clear invalid input
+            choice = 0; // Force it to the default case
         }
-    } while (choice != 2);
+
+       switch (choice) {
+            case 1:
+                // Reset game state and score for a new game
+                clearHashMap();
+                currentScore = 0; // <-- ADD THIS LINE
+
+                playGame(dictionary, totalWords, &currentScore);
+                break;
+            case 2:
+                displayRules();
+                break;
+            case 3:
+                printf("\n    Thanks for playing! Final Score: %d\n\n", currentScore);
+                break;
+            default:
+                printf("\n    (!) Invalid choice. Please select a valid option.\n");
+                printf("    Press Enter to continue...");
+                while (getchar() != '\n'); // Clear buffer
+                getchar(); // Wait for user to press Enter
+        }
+    } while (choice != 3);
+
+    
+   
 
     return 0;
 }
